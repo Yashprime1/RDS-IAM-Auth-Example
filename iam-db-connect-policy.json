@@ -5,8 +5,8 @@
       "Effect": "Allow",
       "Action": "rds-db:connect",
       "Resource": [
-        "arn:aws:rds-db:us-east-1:ACCOUNT_ID:dbuser:RESOURCE_ID/write_user",
-        "arn:aws:rds-db:us-east-1:ACCOUNT_ID:dbuser:RESOURCE_ID/readonly_user"
+        "arn:aws:rds-db:us-east-1:736548753645:dbuser:db-NUHRJSADLN64FAMSSOW7ZQG7CU/write_user",
+        "arn:aws:rds-db:us-east-1:736548753645:dbuser:db-NUHRJSADLN64FAMSSOW7ZQG7CU/readonly_user"
       ]
     }
   ]

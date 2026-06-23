@@ -10,5 +10,6 @@
   </changeSet>
 
   <include file="changelogs/002-create-iam-users.xml" relativeToChangelogFile="true"/>
+  <include file="changelogs/003-create-test-table.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

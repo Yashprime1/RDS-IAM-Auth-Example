@@ -46,3 +46,36 @@ PGPASSWORD="$TOKEN" psql \
 ```
 
 Tokens expire after ~15 minutes; generate a new one for each connection.
+
+## Python permission tests
+
+Two scripts verify IAM auth against `RDS-AUTH-ROLE`:
+
+| Script | DB user | Checks |
+|---|---|---|
+| `scripts/test_write_user.py` | `write_user` | SELECT/INSERT/UPDATE/DELETE pass; CREATE TABLE denied |
+| `scripts/test_readonly_user.py` | `readonly_user` | SELECT passes; INSERT/UPDATE/DELETE denied |
+
+### Prerequisites
+
+1. Run Liquibase so changesets 2–4 exist (users + `iam_auth_test` table).
+2. Attach `iam-db-connect-policy.json` to `arn:aws:iam::736548753645:role/RDS-AUTH-ROLE`.
+3. Your local IAM user must be allowed to `sts:AssumeRole` on that role (if running locally).
+
+### Run
+
+```bash
+pip install -r requirements.txt
+
+# Assumes RDS-AUTH-ROLE automatically (default)
+python scripts/test_write_user.py
+python scripts/test_readonly_user.py
+```
+
+If the role is already active (e.g. on EC2/Lambda), skip re-assume:
+
+```bash
+SKIP_ASSUME_ROLE=1 python scripts/test_write_user.py
+```
+
+Optional env vars: `RDS_HOST`, `RDS_PORT`, `RDS_DB`, `AWS_REGION`, `ASSUME_ROLE_ARN`.
