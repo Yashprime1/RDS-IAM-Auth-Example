@@ -1,0 +1,527 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Standalone Amazon RDS PostgreSQL instance",
+  "Parameters": {
+    "VpcId": {
+      "Type": "AWS::EC2::VPC::Id",
+      "Description": "VPC where the RDS instance will be deployed"
+    },
+    "SubnetIds": {
+      "Type": "List<AWS::EC2::Subnet::Id>",
+      "Description": "Subnets for the DB subnet group (use public subnets for public access; minimum 2 in different AZs)"
+    },
+    "DBInstanceIdentifier": {
+      "Type": "String",
+      "Default": "postgres-standalone",
+      "Description": "Unique identifier for the RDS instance",
+      "MinLength": 1,
+      "MaxLength": 63,
+      "AllowedPattern": "[a-zA-Z][a-zA-Z0-9-]*",
+      "ConstraintDescription": "Must begin with a letter and contain only alphanumeric characters and hyphens"
+    },
+    "DBName": {
+      "Type": "String",
+      "Default": "appdb",
+      "Description": "Initial database name",
+      "MinLength": 1,
+      "MaxLength": 63,
+      "AllowedPattern": "[a-zA-Z_][a-zA-Z0-9_]*",
+      "ConstraintDescription": "Must begin with a letter or underscore and contain only alphanumeric characters and underscores"
+    },
+    "MasterUsername": {
+      "Type": "String",
+      "Default": "postgres",
+      "Description": "Master username for the database",
+      "MinLength": 1,
+      "MaxLength": 63,
+      "AllowedPattern": "[a-zA-Z_][a-zA-Z0-9_]*",
+      "ConstraintDescription": "Must begin with a letter or underscore and contain only alphanumeric characters and underscores"
+    },
+    "MasterUserPassword": {
+      "Type": "String",
+      "NoEcho": true,
+      "Description": "Master user password (min 8 characters)",
+      "MinLength": 8,
+      "MaxLength": 128,
+      "ConstraintDescription": "Must be 8-128 characters"
+    },
+    "DBInstanceClass": {
+      "Type": "String",
+      "Default": "db.t4g.micro",
+      "Description": "RDS instance class",
+      "AllowedValues": [
+        "db.t4g.micro",
+        "db.t4g.small",
+        "db.t4g.medium",
+        "db.t3.micro",
+        "db.t3.small",
+        "db.t3.medium",
+        "db.m6g.large",
+        "db.m6g.xlarge"
+      ]
+    },
+    "EngineVersion": {
+      "Type": "String",
+      "Default": "16.4",
+      "Description": "PostgreSQL engine version"
+    },
+    "AllocatedStorage": {
+      "Type": "Number",
+      "Default": 20,
+      "Description": "Allocated storage in GiB",
+      "MinValue": 20,
+      "MaxValue": 65536
+    },
+    "MaxAllocatedStorage": {
+      "Type": "Number",
+      "Default": 100,
+      "Description": "Maximum storage for autoscaling in GiB (0 to disable)",
+      "MinValue": 0,
+      "MaxValue": 65536
+    },
+    "StorageType": {
+      "Type": "String",
+      "Default": "gp3",
+      "Description": "Storage type",
+      "AllowedValues": [
+        "gp2",
+        "gp3",
+        "io1",
+        "io2"
+      ]
+    },
+    "MultiAZ": {
+      "Type": "String",
+      "Default": "false",
+      "Description": "Enable Multi-AZ deployment for high availability",
+      "AllowedValues": [
+        "true",
+        "false"
+      ]
+    },
+    "EnableIAMDatabaseAuthentication": {
+      "Type": "String",
+      "Default": "true",
+      "Description": "Enable IAM database authentication",
+      "AllowedValues": [
+        "true",
+        "false"
+      ]
+    },
+    "BackupRetentionPeriod": {
+      "Type": "Number",
+      "Default": 7,
+      "Description": "Number of days to retain automated backups (0 to disable)",
+      "MinValue": 0,
+      "MaxValue": 35
+    },
+    "DeletionProtection": {
+      "Type": "String",
+      "Default": "true",
+      "Description": "Enable deletion protection",
+      "AllowedValues": [
+        "true",
+        "false"
+      ]
+    },
+    "EnvironmentName": {
+      "Type": "String",
+      "Default": "dev",
+      "Description": "Environment tag value",
+      "AllowedValues": [
+        "dev",
+        "staging",
+        "prod"
+      ]
+    }
+  },
+  "Conditions": {
+    "EnableStorageAutoscaling": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "MaxAllocatedStorage"
+            },
+            0
+          ]
+        }
+      ]
+    },
+    "EnableMultiAZ": {
+      "Fn::Equals": [
+        {
+          "Ref": "MultiAZ"
+        },
+        "true"
+      ]
+    },
+    "EnableIAMAuth": {
+      "Fn::Equals": [
+        {
+          "Ref": "EnableIAMDatabaseAuthentication"
+        },
+        "true"
+      ]
+    },
+    "EnableDeletionProtection": {
+      "Fn::Equals": [
+        {
+          "Ref": "DeletionProtection"
+        },
+        "true"
+      ]
+    }
+  },
+  "Resources": {
+    "DBSubnetGroup": {
+      "Type": "AWS::RDS::DBSubnetGroup",
+      "Properties": {
+        "DBSubnetGroupDescription": "Subnet group for standalone PostgreSQL RDS",
+        "SubnetIds": {
+          "Ref": "SubnetIds"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${DBInstanceIdentifier}-subnet-group"
+            }
+          },
+          {
+            "Key": "Environment",
+            "Value": {
+              "Ref": "EnvironmentName"
+            }
+          }
+        ]
+      }
+    },
+    "DBSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Allow public PostgreSQL access on port 5432",
+        "VpcId": {
+          "Ref": "VpcId"
+        },
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 5432,
+            "ToPort": 5432,
+            "CidrIp": "0.0.0.0/0",
+            "Description": "PostgreSQL from anywhere"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${DBInstanceIdentifier}-sg"
+            }
+          },
+          {
+            "Key": "Environment",
+            "Value": {
+              "Ref": "EnvironmentName"
+            }
+          }
+        ]
+      }
+    },
+    "DBParameterGroup": {
+      "Type": "AWS::RDS::DBParameterGroup",
+      "Properties": {
+        "Description": "PostgreSQL parameter group for standalone RDS",
+        "Family": {
+          "Fn::Join": [
+            "",
+            [
+              "postgres",
+              {
+                "Fn::Select": [
+                  0,
+                  {
+                    "Fn::Split": [
+                      ".",
+                      {
+                        "Ref": "EngineVersion"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          ]
+        },
+        "Parameters": {
+          "rds.force_ssl": "1",
+          "log_connections": "1",
+          "log_disconnections": "1"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${DBInstanceIdentifier}-params"
+            }
+          },
+          {
+            "Key": "Environment",
+            "Value": {
+              "Ref": "EnvironmentName"
+            }
+          }
+        ]
+      }
+    },
+    "PostgresInstance": {
+      "Type": "AWS::RDS::DBInstance",
+      "DeletionPolicy": "Snapshot",
+      "UpdateReplacePolicy": "Snapshot",
+      "Properties": {
+        "DBInstanceIdentifier": {
+          "Ref": "DBInstanceIdentifier"
+        },
+        "Engine": "postgres",
+        "EngineVersion": {
+          "Ref": "EngineVersion"
+        },
+        "DBInstanceClass": {
+          "Ref": "DBInstanceClass"
+        },
+        "AllocatedStorage": {
+          "Ref": "AllocatedStorage"
+        },
+        "MaxAllocatedStorage": {
+          "Fn::If": [
+            "EnableStorageAutoscaling",
+            {
+              "Ref": "MaxAllocatedStorage"
+            },
+            {
+              "Ref": "AWS::NoValue"
+            }
+          ]
+        },
+        "StorageType": {
+          "Ref": "StorageType"
+        },
+        "StorageEncrypted": true,
+        "DBName": {
+          "Ref": "DBName"
+        },
+        "MasterUsername": {
+          "Ref": "MasterUsername"
+        },
+        "MasterUserPassword": {
+          "Ref": "MasterUserPassword"
+        },
+        "Port": 5432,
+        "PubliclyAccessible": true,
+        "MultiAZ": {
+          "Fn::If": [
+            "EnableMultiAZ",
+            true,
+            false
+          ]
+        },
+        "DBSubnetGroupName": {
+          "Ref": "DBSubnetGroup"
+        },
+        "VPCSecurityGroups": [
+          {
+            "Ref": "DBSecurityGroup"
+          }
+        ],
+        "DBParameterGroupName": {
+          "Ref": "DBParameterGroup"
+        },
+        "EnableIAMDatabaseAuthentication": {
+          "Fn::If": [
+            "EnableIAMAuth",
+            true,
+            false
+          ]
+        },
+        "BackupRetentionPeriod": {
+          "Ref": "BackupRetentionPeriod"
+        },
+        "PreferredBackupWindow": "03:00-04:00",
+        "PreferredMaintenanceWindow": "sun:04:00-sun:05:00",
+        "AutoMinorVersionUpgrade": true,
+        "DeletionProtection": {
+          "Fn::If": [
+            "EnableDeletionProtection",
+            true,
+            false
+          ]
+        },
+        "CopyTagsToSnapshot": true,
+        "EnablePerformanceInsights": true,
+        "PerformanceInsightsRetentionPeriod": 7,
+        "MonitoringInterval": 60,
+        "MonitoringRoleArn": {
+          "Fn::GetAtt": [
+            "RDSEnhancedMonitoringRole",
+            "Arn"
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Ref": "DBInstanceIdentifier"
+            }
+          },
+          {
+            "Key": "Environment",
+            "Value": {
+              "Ref": "EnvironmentName"
+            }
+          }
+        ]
+      }
+    },
+    "RDSEnhancedMonitoringRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "monitoring.rds.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole"
+        ]
+      }
+    }
+  },
+  "Metadata": {
+    "AWS::CloudFormation::Interface": {
+      "ParameterGroups": [
+        {
+          "Label": {
+            "default": "Network Configuration"
+          },
+          "Parameters": [
+            "VpcId",
+            "SubnetIds"
+          ]
+        },
+        {
+          "Label": {
+            "default": "Database Configuration"
+          },
+          "Parameters": [
+            "DBInstanceIdentifier",
+            "DBName",
+            "MasterUsername",
+            "MasterUserPassword",
+            "EngineVersion",
+            "EnableIAMDatabaseAuthentication"
+          ]
+        },
+        {
+          "Label": {
+            "default": "Instance & Storage"
+          },
+          "Parameters": [
+            "DBInstanceClass",
+            "AllocatedStorage",
+            "MaxAllocatedStorage",
+            "StorageType",
+            "MultiAZ"
+          ]
+        },
+        {
+          "Label": {
+            "default": "Operations"
+          },
+          "Parameters": [
+            "BackupRetentionPeriod",
+            "DeletionProtection",
+            "EnvironmentName"
+          ]
+        }
+      ]
+    }
+  },
+  "Outputs": {
+    "DBInstanceIdentifier": {
+      "Description": "RDS instance identifier",
+      "Value": {
+        "Ref": "PostgresInstance"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-DBInstanceIdentifier"
+        }
+      }
+    },
+    "DBEndpointAddress": {
+      "Description": "Connection endpoint hostname",
+      "Value": {
+        "Fn::GetAtt": [
+          "PostgresInstance",
+          "Endpoint.Address"
+        ]
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-DBEndpointAddress"
+        }
+      }
+    },
+    "DBEndpointPort": {
+      "Description": "Connection endpoint port",
+      "Value": {
+        "Fn::GetAtt": [
+          "PostgresInstance",
+          "Endpoint.Port"
+        ]
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-DBEndpointPort"
+        }
+      }
+    },
+    "DBName": {
+      "Description": "Initial database name",
+      "Value": {
+        "Ref": "DBName"
+      }
+    },
+    "DBSecurityGroupId": {
+      "Description": "Security group attached to the RDS instance",
+      "Value": {
+        "Ref": "DBSecurityGroup"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-DBSecurityGroupId"
+        }
+      }
+    },
+    "DBSubnetGroupName": {
+      "Description": "DB subnet group name",
+      "Value": {
+        "Ref": "DBSubnetGroup"
+      }
+    },
+    "ConnectionString": {
+      "Description": "Example PostgreSQL connection string (replace password at runtime)",
+      "Value": {
+        "Fn::Sub": "postgresql://${MasterUsername}:<password>@${PostgresInstance.Endpoint.Address}:${PostgresInstance.Endpoint.Port}/${DBName}?sslmode=require"
+      }
+    }
+  }
+}

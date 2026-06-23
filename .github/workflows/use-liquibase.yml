@@ -1,0 +1,27 @@
+name: Use Liquibase
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  use-liquibase:
+    runs-on: ubuntu-latest
+    steps:
+        - uses: actions/checkout@v4
+        - uses: liquibase/setup-liquibase@v3
+          with:
+            version: '5.0.3'
+            edition: 'community'
+        - run: liquibase --version
+
+        - name: Install PostgreSQL Driver
+          run: liquibase lpm add postgresql --global
+        
+        - name: Run Database Migration
+          run: liquibase update \
+            --changelog-file=changelog.xml \
+            --url=jdbc:postgresql://localhost:5432/mydb \
+            --username=dbuser \
+            --password=${{ secrets.DB_PASSWORD }}
