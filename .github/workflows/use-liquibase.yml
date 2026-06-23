@@ -1,9 +1,7 @@
 name: Use Liquibase
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 jobs:
   use-liquibase:
