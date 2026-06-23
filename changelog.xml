@@ -9,4 +9,6 @@
     <sql>SELECT 1;</sql>
   </changeSet>
 
+  <include file="changelogs/002-create-iam-users.xml" relativeToChangelogFile="true"/>
+
 </databaseChangeLog>

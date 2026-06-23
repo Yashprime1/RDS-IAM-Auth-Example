@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+  xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+  <changeSet id="2" author="rds-iam-auth">
+    <comment>Write user (DML) authenticated via RDS IAM</comment>
+    <sql>
+      CREATE USER write_user WITH LOGIN;
+      GRANT rds_iam TO write_user;
+      GRANT CONNECT ON DATABASE appdb TO write_user;
+      GRANT USAGE ON SCHEMA public TO write_user;
+      GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO write_user;
+      GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO write_user;
+      ALTER DEFAULT PRIVILEGES IN SCHEMA public
+        GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO write_user;
+      ALTER DEFAULT PRIVILEGES IN SCHEMA public
+        GRANT USAGE, SELECT ON SEQUENCES TO write_user;
+    </sql>
+    <rollback>
+      REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM write_user;
+      REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM write_user;
+      REVOKE ALL ON SCHEMA public FROM write_user;
+      REVOKE CONNECT ON DATABASE appdb FROM write_user;
+      REVOKE rds_iam FROM write_user;
+      DROP USER write_user;
+    </rollback>
+  </changeSet>
+
+  <changeSet id="3" author="rds-iam-auth">
+    <comment>Read-only user authenticated via RDS IAM</comment>
+    <sql>
+      CREATE USER readonly_user WITH LOGIN;
+      GRANT rds_iam TO readonly_user;
+      GRANT CONNECT ON DATABASE appdb TO readonly_user;
+      GRANT USAGE ON SCHEMA public TO readonly_user;
+      GRANT SELECT ON ALL TABLES IN SCHEMA public TO readonly_user;
+      ALTER DEFAULT PRIVILEGES IN SCHEMA public
+        GRANT SELECT ON TABLES TO readonly_user;
+    </sql>
+    <rollback>
+      REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM readonly_user;
+      REVOKE ALL ON SCHEMA public FROM readonly_user;
+      REVOKE CONNECT ON DATABASE appdb FROM readonly_user;
+      REVOKE rds_iam FROM readonly_user;
+      DROP USER readonly_user;
+    </rollback>
+  </changeSet>
+
+</databaseChangeLog>
