@@ -4,7 +4,6 @@ import boto3
 import psycopg2
 
 DEFAULT_HOST = "postgres-standalone.cuusbdloicfm.us-east-1.rds.amazonaws.com"
-DEFAULT_ROLE_ARN = "arn:aws:iam::736548753645:role/RDS-AUTH-ROLE"
 TABLE_NAME = "iam_auth_test"
 
 
@@ -14,8 +13,13 @@ def _config():
         "port": int(os.environ.get("RDS_PORT", "5432")),
         "database": os.environ.get("RDS_DB", "appdb"),
         "region": os.environ.get("AWS_REGION", "us-east-1"),
-        "role_arn": os.environ.get("ASSUME_ROLE_ARN", DEFAULT_ROLE_ARN),
+        "role_arn": os.environ.get("ASSUME_ROLE_ARN", ""),
     }
+
+
+def current_identity_arn() -> str:
+    sts = boto3.client("sts", region_name=_config()["region"])
+    return sts.get_caller_identity()["Arn"]
 
 
 def _boto3_session():
